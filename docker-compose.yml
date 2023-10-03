@@ -1,0 +1,136 @@
+version: '3'
+
+networks:
+    laravel:
+
+
+services:
+    app:
+        build:
+            context: ./dockerfiles
+            dockerfile: nginx.dockerfile
+            args:
+                - UID=${UID:-1000}
+                - GID=${GID:-1000}
+        ports:
+            - "8000:80"
+        volumes:
+            - ./:/var/www/html:delegated
+        depends_on:
+            - php
+        #      - redis
+            - mysql
+            - es01
+        networks:
+            - laravel
+
+    mysql:
+        image: mariadb:10.6
+        restart: unless-stopped
+        tty: true
+        ports:
+            - "10000:3306"
+        volumes:
+            - '../relevantinformer_data:/var/lib/mysql'
+        environment:
+            MYSQL_DATABASE: $DB_DATABASE
+            MYSQL_USER: $DB_USERNAME
+            MYSQL_PASSWORD: $DB_PASSWORD
+            MYSQL_ROOT_PASSWORD: $DB_PASSWORD
+            SERVICE_NAME: mysql
+        networks:
+            - laravel
+
+    php:
+        build:
+            context: ./dockerfiles
+            dockerfile: php.dockerfile
+            args:
+                - UID=${UID:-1000}
+                - GID=${GID:-1000}
+        ports:
+            - "9000:9000"
+        volumes:
+            - ./dockerfiles/ssh:/home/laravel/.ssh
+            - ./:/var/www/html:delegated
+        networks:
+            - laravel
+    es01:
+        image: elasticsearch:8.8.0
+        container_name: es01
+        depends_on:
+            - mysql
+        volumes:
+            - ../relevantinformer_data_elastic:/usr/share/elasticsearch/data
+        ulimits:
+            memlock:
+                soft: -1
+                hard: -1
+        ports:
+            - 9200:9200
+            - 9300:9300
+        environment:
+            - node.name=es01
+            - cluster.name=es-docker-cluster
+            - discovery.type=single-node
+            - xpack.security.enabled=false
+        networks:
+            - laravel
+#  redis:
+#    image: redis:alpine
+#    restart: unless-stopped
+#    ports:
+#      - "6379:6379"
+#    networks:
+#      - laravel
+
+#  composer:
+#    build:
+#      context: ./dockerfiles
+#      dockerfile: php.dockerfile
+#      args:
+#        - UID=${UID:-1000}
+#        - GID=${GID:-1000}
+#    volumes:
+#      - ./:/var/www/html
+#    depends_on:
+#      - php
+#    entrypoint: [ 'composer', '--ignore-platform-reqs' ]
+#    networks:
+#      - laravel
+
+#  npm:
+#    image: node:current-alpine
+#    volumes:
+#      - ./:/var/www/html
+#    ports:
+#      - "3000:3000"
+#      - "3001:3001"
+#      - "5173:5173"
+#    working_dir: /var/www/html
+#    entrypoint: [ 'npm' ]
+#    networks:
+#      - laravel
+
+#  artisan:
+#    build:
+#      context: ./dockerfiles
+#      dockerfile: php.dockerfile
+#      args:
+#        - UID=${UID:-1000}
+#        - GID=${GID:-1000}
+#    volumes:
+#      - ./:/var/www/html:delegated
+#    depends_on:
+#      - mysql
+#    entrypoint: [ 'php', '/var/www/html/artisan' ]
+#    networks:
+#      - laravel
+
+#  mailhog:
+#    image: mailhog/mailhog:latest
+#    ports:
+#      - "1025:1025"
+#      - "8025:8025"
+#    networks:
+#      - laravel

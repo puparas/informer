@@ -1,0 +1,6 @@
+ul.navbar-nav.me-auto {
+    display: none!important;
+}
+nav.navbar.navbar-expand-md.navbar-light.bg-white.shadow-sm{
+    height: 24px!important;
+}

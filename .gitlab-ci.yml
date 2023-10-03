@@ -1,0 +1,48 @@
+stages:
+  - build
+  - deploy
+
+variables:
+  REGISTRY: "registry.gitlab.com/relevant-team/relevant_informer"
+
+before_script:
+  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+app_build:
+  stage: build
+  tags:
+    - informer
+  script:
+    - docker build --build-arg NODE_ENV="dev" -t "$REGISTRY/dev/app:$CI_COMMIT_SHA" -f ./Dockerfile .
+    - docker push "$REGISTRY/dev/app:$CI_COMMIT_SHA"
+
+
+dev_deploy:
+  stage: deploy
+  tags:
+    - informer
+  script:
+    - export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
+    - export CONTAINER_PREFIX=informer
+    - docker stop $(docker ps -a | grep ${CONTAINER_PREFIX}_ | awk '{print $1}') || true
+    - docker rm $(docker ps -a | grep ${CONTAINER_PREFIX}_ | awk '{print $1}') || true
+    - docker volume rm $(docker volume ls | grep ${CONTAINER_PREFIX}_ | awk '{print $2}') || true
+    - docker network rm ${CONTAINER_PREFIX}_laravel || true
+    - docker system prune
+    - cp  .env.example  .env
+    - echo  "DB_DATABASE=$INFORMER_DB_DATABASE"  >>  .env
+    - echo  "DB_USERNAME=$INFORMER_DB_USERNAME"  >>  .env
+    - echo  "DB_PASSWORD=$INFORMER_DB_PASSWORD"  >>  .env
+    - echo  "JWT_SECRET=$INFORMER_JWT_SECRET"  >>  .env
+    - echo  "PLANFIX_API_TOKEN=$INFORMER_PLANFIX_API_TOKEN"  >>  .env
+    - chmod -R 777 /root/builds/XPsCy4Pb/0/relevant-team/relevant_informer
+    - sudo -E docker-compose -p $CONTAINER_PREFIX -f docker-compose.prod.yml up -d
+    - sudo docker exec ${CONTAINER_PREFIX}_php_1 composer update
+    - sudo docker exec ${CONTAINER_PREFIX}_php_1 composer install
+    - docker exec ${CONTAINER_PREFIX}_php_1 php artisan cache:clear
+    - docker exec ${CONTAINER_PREFIX}_php_1 php artisan config:cache
+    - docker exec ${CONTAINER_PREFIX}_php_1 php artisan route:cache
+    - docker exec ${CONTAINER_PREFIX}_php_1 php artisan storage:link
+    - docker exec ${CONTAINER_PREFIX}_php_1 php artisan migrate --force
+    - 'curl -X POST -H "Content-Type: application/json" -d "{\"chat_id\": \"-984829575\", \"text\": \"CI: Новая версия Relevant_informer (https://puparas.ru) собрана успешно! Посмотреть статус и ход выполнения можно по ссылке: https://gitlab.com/relevant-team/relevant_informer/-/pipelines\"}" https://api.telegram.org/bot6269550458:AAEW5gnQkMT7xlwoQLDx7WfIN13fS4o1ZBg/sendMessage'
+
